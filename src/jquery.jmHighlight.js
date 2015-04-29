@@ -38,7 +38,8 @@
 		"element": "span",
 		"className": "highlight",
 		"filter": [],
-		"separateWordSearch": false
+		"separateWordSearch": false,
+		"afterInit": null
 	};
 	
 	/**
@@ -50,15 +51,13 @@
 	 * @return bool
 	 */
 	function initHighlight(keyword_, $context_, options_){
-		
-		if($context_ instanceof $ == false || typeof keyword_ !== "string"
+		if($context_ instanceof $ == false || (typeof keyword_ !== "string" && !$.isArray(keyword_))
 			|| keyword_ == ""){
 			return false;
 		}
 		
 		// Merge defaults with options
 		options_ = $.extend({}, _defaults, options_);
-		
 		// Get all nodes inside the context, but do not search in nodes
 		// that were already highlighted
 		var $contextElements = $context_.find("*:not([data-jmHighlight])");
@@ -72,7 +71,13 @@
 		}
 		
 		// Highlight elements
-		return highlight(keyword_, $contextElements, options_);
+		if($.isArray(keyword_)) {
+			for(var i=0; i<keyword_.length; i++) {
+				highlight(keyword_[i], $contextElements, options_);
+			}
+		} else {
+			return highlight(keyword_, $contextElements, options_);
+		}
 		
 	}
 	
@@ -154,24 +159,30 @@
 		forEachTextNodes($elements_, function(node_){
 			
 			var node = node_;
-			if(node.nodeValue.toLowerCase().indexOf(keyword_.toLowerCase()) == -1){
-				return true;
+			var re = new RegExp("\\b"+keyword_.toLowerCase()+"\\b", 'gi');
+			var match;
+			var nodeValue = node.nodeValue.toLowerCase();
+			while((match = re.exec(nodeValue)) != null) {
+				var pos = match.index;
+				pos -= (nodeValue.substr(0, pos).toLowerCase().length - nodeValue.substr(0, pos).length);
+				if (pos >= 0) {
+					var spannode = document.createElement('span');
+					spannode.className = options_.className;
+					var middlebit = node.splitText(pos);
+					var endbit = middlebit.splitText(keyword_.length);
+					var middleclone = middlebit.cloneNode(true);
+					spannode.appendChild(middleclone);
+
+					if(typeof options_['afterInit'] === 'function') {
+						options_['afterInit'].call($(spannode));
+					}
+
+					middlebit.parentNode.replaceChild(spannode, middlebit);
+					nodeValue = endbit.nodeValue.toLowerCase();
+					node = endbit;
+				} 
 			}
-			var tagO = "<" + options_["element"] + " class='" + options_["className"] +
-						"' data-jmHighlight='true'>";
-			var tagC = "</" + options_["element"] + ">";
-			if(node.parentNode != null){
-				var regex = new RegExp(keyword_, "gi");
-				// Save the original keyword before replacing since
-				// the original keyword may contain some letters upper/lower-case.
-				// The keyword maybe not.
-				var originalKeyword = regex.exec(node.parentNode.innerHTML)[0];
-				node.parentNode.innerHTML = node.parentNode.innerHTML.replace(
-					regex,
-					tagO + originalKeyword + tagC
-				);
-			}
-			
+
 		});
 		
 		return true;
